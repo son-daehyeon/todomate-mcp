@@ -1,13 +1,10 @@
 # todomate-mcp
 
-[투두메이트(todo mate)](https://todomate.net)를 Claude 같은 MCP 클라이언트에서 쓸 수 있게 해 주는 **비공식** MCP 서버입니다.
+> 투두메이트(todo mate) 비공식 MCP 서버
 
-"오늘 할 일 보여줘", "eCampus 마감들을 투두메이트 학교 카테고리에 넣어줘", "과제 작성 완료 처리해줘" 같은 요청을 Claude가 직접 처리할 수 있습니다.
+[투두메이트](https://todomate.net)를 Claude 같은 MCP 클라이언트에서 쓸 수 있게 해 주는 비공식 MCP 서버다. "오늘 할 일 보여줘", "과제 작성 완료 처리해줘" 같은 요청을 클라이언트가 직접 처리한다. 투두메이트 공식 MCP는 카카오 PlayMCP로만 제공되고 로컬 클라이언트에서는 OAuth 등록이 IP 제한으로 막혀 있어서, 웹 앱이 쓰는 것과 같은 Firebase(Firestore REST) 경로로 직접 동작하도록 만들었다.
 
-> 투두메이트 공식 MCP는 카카오 PlayMCP를 통해서만 제공되고, 로컬 클라이언트(Claude Code 등)에서는 OAuth 등록이 IP 제한으로 막혀 있습니다. 이 서버는 투두메이트 웹 앱이 쓰는 것과 같은 Firebase 경로로 직접 동작합니다.
-
-## 할 수 있는 것
-
+## 주요 기능
 | 도구 | 내용 |
 |---|---|
 | `list_categories` | 카테고리(목표) 목록. `include_finished`로 종료된 카테고리까지 |
@@ -16,39 +13,40 @@
 | `update_todo` | 완료/미완료, 내용, 날짜 이동, 카테고리 변경, 알림 설정/해제, 메모 |
 | `delete_todo` | 할 일 삭제 |
 
-## 설치
+- 로그인은 별도 프로필로 띄운 크롬 창에서 평소처럼(구글, 애플, 카카오, 이메일) 하고, 감지되면 Firebase 리프레시 토큰만 `~/.config/todomate-mcp/credentials.json`(권한 600)에 저장한다. 비밀번호는 저장하지 않는다
+- 날짜는 `YYYY-MM-DD`, 알림 시각은 `YYYY-MM-DD HH:mm`(로컬 시간대)으로 받고, 투두메이트와 같이 날짜를 그 날의 UTC 자정으로 저장한다
+- 수정·삭제는 본인이 작성한 할 일에만 허용한다. 루틴, 크루, 다이어리, 타이머는 다루지 않는다
+- 공식 API가 아니므로 앱 구조가 바뀌면 동작하지 않을 수 있다. 본인 계정에만 쓴다
 
-Node.js 22 이상과 Google Chrome이 필요합니다.
+## 기술 스택
+| 영역 | 기술 |
+|---|---|
+| 언어 | JavaScript (Node.js 22 이상, ES 모듈) |
+| 프레임워크 | @modelcontextprotocol/sdk 1, zod 4 |
+| 데이터 | Firebase Auth·Firestore REST API |
 
+## 구조
+```
+src/index.js      MCP 서버(stdio)와 login 명령 (크롬 원격 디버깅으로 로그인 감지)
+src/todomate.js   도구 정의와 할 일·카테고리 처리
+src/client.js     토큰 갱신, Firestore REST 호출, 값 변환
+src/check.js      실제 계정으로 조회·추가·수정·삭제를 점검하는 스크립트
+```
+
+## 실행
 ```bash
-git clone git@github.com:son-daehyeon/todomate-mcp.git ~/.local/share/mcp/todomate-mcp
+git clone https://github.com/son-daehyeon/todomate-mcp.git ~/.local/share/mcp/todomate-mcp
 cd ~/.local/share/mcp/todomate-mcp
 npm install
-```
-
-## 로그인
-
-```bash
 node src/index.js login
-```
 
-크롬 창이 열리면 평소처럼(구글, 애플, 카카오, 이메일) 투두메이트에 로그인하세요. 로그인이 감지되면 창이 자동으로 닫히고 `~/.config/todomate-mcp/credentials.json`(권한 600)에 로그인 정보가 저장됩니다.
-
-- 비밀번호는 저장하지 않습니다. Firebase 리프레시 토큰만 저장합니다.
-- 로그인용 크롬 프로필은 `~/.config/todomate-mcp/chrome-profile`에 따로 만들어지며, 평소 쓰는 크롬과 섞이지 않습니다.
-- 크롬이 다른 위치에 있으면 `CHROME_PATH`로 지정하세요.
-- 로그인이 만료되면 위 명령을 다시 실행하세요.
-
-## Claude에 연결
-
-**Claude Code**
-
-```bash
+# Claude Code에 등록
 claude mcp add todomate --scope user -- node ~/.local/share/mcp/todomate-mcp/src/index.js
+
+# 실제 계정으로 점검
+npm run check
 ```
-
-**Claude Desktop** — `~/Library/Application Support/Claude/claude_desktop_config.json`
-
+Claude Desktop은 `claude_desktop_config.json`에 등록한다.
 ```json
 {
   "mcpServers": {
@@ -59,22 +57,7 @@ claude mcp add todomate --scope user -- node ~/.local/share/mcp/todomate-mcp/src
   }
 }
 ```
+Google Chrome이 필요하다. 환경 변수: `CHROME_PATH` (크롬 위치가 다를 때), `TODOMATE_CONFIG_DIR` (설정 폴더를 바꿀 때)
 
-## 날짜와 시간
-
-- 날짜는 `YYYY-MM-DD`, 알림 시각은 `YYYY-MM-DD HH:mm`(이 컴퓨터의 시간대 기준)입니다.
-- 투두메이트는 날짜를 "그 날의 UTC 자정"으로 저장하며, 이 서버도 같은 방식으로 저장합니다.
-
-## 주의
-
-- 투두메이트의 공식 API가 아닙니다. 앱 구조가 바뀌면 동작하지 않을 수 있고, 이용약관상 문제가 될 수 있으니 본인 계정에만 쓰세요.
-- 수정·삭제는 본인 할 일(`writerID`가 내 계정)에만 허용됩니다.
-- 루틴, 크루, 다이어리, 타이머는 다루지 않습니다.
-
-## 점검
-
-실제 계정으로 조회 후 테스트 할 일을 하나 추가·수정·삭제해 결과를 검사합니다.
-
-```bash
-npm run check
-```
+---
+2026 · 개인 프로젝트 · 사용 중
